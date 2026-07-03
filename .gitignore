@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+threads/
+Pipfile.lock
+crawler/page-samples/
+.env

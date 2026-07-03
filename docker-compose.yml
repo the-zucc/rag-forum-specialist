@@ -1,0 +1,115 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.7.0
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    # Lets the ml-commons Ollama connector (see opensearch-bootstrap/models.md)
+    # reach Ollama on the host from inside the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -s http://localhost:9200/_cluster/health |
+          grep -q '"status":"green"\|"status":"yellow"'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  dashboards:
+    image: opensearchproject/opensearch-dashboards:3.7.0
+    container_name: opensearch-dashboards
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+      # Enables the enhanced Discover experience (data sources, workspaces, explore).
+      - DATA_SOURCE_ENABLED=true
+      - WORKSPACE_ENABLED=true
+      - EXPLORE_ENABLED=true
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+
+  # One-shot: creates the index template and registers/deploys the local
+  # Ollama generative + embedding models via ml-commons. Re-runnable; see
+  # opensearch-bootstrap/README.md. Must complete before ingestion starts
+  # (see ingest's depends_on below).
+  opensearch-bootstrap:
+    build:
+      context: ./opensearch-bootstrap
+    container_name: opensearch-bootstrap
+    environment:
+      - ES_URL=http://opensearch:9200
+      - INDEX_NAME=forum-posts
+      - OLLAMA_ENDPOINT=host.docker.internal:11434
+      - OLLAMA_MODEL=gpt-oss:20b
+      - EMBED_MODEL=nomic-embed-text
+      - EMBED_DIMENSION=768
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    build:
+      context: ./ingestion
+    container_name: ingest
+    # Host networking so it can reach Ollama on the host's 127.0.0.1:11434
+    # (Ollama doesn't listen on the docker bridge interface).
+    network_mode: host
+    environment:
+      - ES_URL=http://localhost:9200
+      - INDEX_NAME=forum-posts
+      - OLLAMA_URL=http://localhost:11434
+      - EMBED_MODEL=nomic-embed-text
+    volumes:
+      - ./threads:/app/threads:ro
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      opensearch-bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  scraper-tuning-troubleshooting:
+    build:
+      context: .
+      dockerfile: crawler/Dockerfile
+    container_name: scraper-tuning-troubleshooting
+    command:
+      - pipenv
+      - run
+      - python
+      - -u
+      - crawler/main.py
+      - --board-url
+      - "${SCRAPE_BOARD_URL:?Set SCRAPE_BOARD_URL in .env (see .env.example)}"
+      - --output-dir
+      - /app/threads
+      - --skip-home
+      - --serve
+    volumes:
+      - ./threads:/app/threads
+    restart: unless-stopped
+
+volumes:
+  opensearch-data:

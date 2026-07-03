@@ -1,0 +1,111 @@
+{
+  "index_patterns": ["forum-posts"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index": { "knn": true }
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "vector_field": {
+          "type": "knn_vector",
+          "dimension": 768,
+          "method": {
+            "name": "hnsw",
+            "space_type": "l2",
+            "engine": "faiss"
+          }
+        },
+        "post_url": { "type": "keyword" },
+        "thread_id": { "type": "keyword" },
+        "thread_title": {
+          "type": "text",
+          "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } }
+        },
+        "thread_url": { "type": "keyword" },
+        "page_url": { "type": "keyword" },
+        "author": {
+          "properties": {
+            "id": { "type": "keyword" },
+            "name": {
+              "type": "text",
+              "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+            },
+            "handle": { "type": "keyword" },
+            "profile_url": { "type": "keyword" }
+          }
+        },
+        "created_at": { "type": "date" },
+        "created_at_timestamp": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
+        },
+        "created_at_text": { "type": "keyword" },
+        "replies_to": { "type": "keyword" },
+        "likes": {
+          "properties": {
+            "count": { "type": "integer" },
+            "users": {
+              "type": "nested",
+              "properties": {
+                "id": { "type": "keyword" },
+                "name": {
+                  "type": "text",
+                  "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+                },
+                "handle": { "type": "keyword" },
+                "profile_url": { "type": "keyword" }
+              }
+            },
+            "text": { "type": "text" },
+            "hidden_count": { "type": "integer" }
+          }
+        },
+        "via": { "type": "keyword" },
+        "message_text": { "type": "text" },
+        "body_text": { "type": "text" },
+        "message_html": { "type": "text", "index": false },
+        "links": {
+          "type": "nested",
+          "properties": {
+            "url": { "type": "keyword" },
+            "text": { "type": "text" }
+          }
+        },
+        "images": {
+          "type": "nested",
+          "properties": {
+            "url": { "type": "keyword" },
+            "alt": { "type": "text" },
+            "title": { "type": "text" }
+          }
+        },
+        "signature_text": { "type": "text" },
+        "signature_html": { "type": "text", "index": false },
+        "edited": {
+          "properties": {
+            "edited_at": { "type": "date" },
+            "edited_at_timestamp": {
+              "type": "date",
+              "format": "strict_date_optional_time||epoch_millis"
+            },
+            "text": { "type": "text" },
+            "editor": {
+              "properties": {
+                "id": { "type": "keyword" },
+                "name": {
+                  "type": "text",
+                  "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+                },
+                "handle": { "type": "keyword" },
+                "profile_url": { "type": "keyword" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+beautifulsoup4 = "*"
+selenium = "*"
+seleniumbase = "*"
+langchain = "*"
+langchain-community = "*"
+opensearch-py = "*"
+ollama = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
