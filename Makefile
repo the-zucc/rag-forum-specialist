@@ -15,7 +15,9 @@ RAG_IMAGE ?= rag-agent
 # (index template + Ollama model registration, before ingestion starts), the
 # ingestion pipeline (watches threads/ and keeps the index in sync), and the
 # scraper for board 9 (tuning & troubleshooting) in serve mode, all in the background.
+# Builds the images from scratch (no layer cache) so code changes always take.
 up:
+	$(COMPOSE) build --no-cache
 	$(COMPOSE) up -d
 
 down:
@@ -41,15 +43,16 @@ clean:
 	$(COMPOSE) down -v
 
 # Build the RAG CLI image (rag-agent/rag.py + its dependencies), separate from
-# the scraper app image.
+# the scraper app image. Built from scratch (no layer cache) so code changes
+# always take.
 rag-build:
-	docker build -f rag-agent/Dockerfile -t $(RAG_IMAGE) .
+	docker build --no-cache -f rag-agent/Dockerfile -t $(RAG_IMAGE) .
 
 # Demonstration query against the RAG CLI, run in its own container.
 # Requires OpenSearch (make up) and a local Ollama with
 # $(LLM_MODEL)/$(EMBED_MODEL) pulled. Uses host networking so the container
 # can reach OpenSearch and Ollama on localhost.
-ask: up rag-build
+ask: rag-build
 	docker run --rm --network host $(RAG_IMAGE) \
 		"how do I get rid of the hesitation around 3-4000 rpm on my Suzuki RE5?" \
 		--opensearch-url $(ES_URL) \

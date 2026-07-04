@@ -9,7 +9,7 @@ components:
 | [`crawler/`](crawler/README.md) | Crawls a forum with Selenium and writes `<thread-id>/posts.json` files. | [crawler/README.md](crawler/README.md) |
 | [`opensearch-bootstrap/`](opensearch-bootstrap/README.md) | One-shot: creates the OpenSearch index template and registers the local Ollama generative + embedding models, before ingestion starts. | [opensearch-bootstrap/README.md](opensearch-bootstrap/README.md) |
 | [`ingestion/`](ingestion/README.md) | Watches those JSON files and indexes them into OpenSearch, embedding text with Ollama for vector search. | [ingestion/README.md](ingestion/README.md) |
-| [`rag-agent/`](rag-agent/README.md) | CLI that answers questions over the indexed posts using LangChain + Ollama + OpenSearch. | [rag-agent/README.md](rag-agent/README.md) |
+| [`rag-agent/`](rag-agent/README.md) | CLI that answers questions over the indexed posts with an agentic LangGraph loop (the model re-queries hybrid search until it understands, then answers) using Ollama + OpenSearch. | [rag-agent/README.md](rag-agent/README.md) |
 
 ## How It Fits Together
 
@@ -68,7 +68,7 @@ pipenv install
 
 The ingestion pipeline has its own minimal `requirements.txt` (see
 [ingestion/README.md](ingestion/README.md)) so it can run standalone without
-Selenium/LangChain installed.
+Selenium/LangGraph installed.
 
 ## Development Notes
 

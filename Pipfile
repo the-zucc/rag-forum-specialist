@@ -7,10 +7,7 @@ name = "pypi"
 beautifulsoup4 = "*"
 selenium = "*"
 seleniumbase = "*"
-langchain = "*"
-langchain-community = "*"
-opensearch-py = "*"
-ollama = "*"
+langgraph = "*"
 
 [dev-packages]
 
