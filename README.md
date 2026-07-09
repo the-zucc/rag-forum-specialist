@@ -1,8 +1,9 @@
-# Forum Scraper
+# RAG-enabled Forum Specialist
 
 Scrapes a forum, indexes the posts for search, and answers questions about
-them with a local RAG pipeline. The project is split into independent
-components:
+them with a local RAG pipeline using Opensearch for relevant info.
+
+The project is split into independent components:
 
 | Directory | What it does | README |
 |---|---|---|
