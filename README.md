@@ -1,4 +1,4 @@
-# RAG-enabled Forum Specialist
+# RAG-Enabled Forum Specialist
 
 Scrapes a forum, indexes the posts for search, and answers questions about
 them with a local RAG pipeline using Opensearch for relevant info.
