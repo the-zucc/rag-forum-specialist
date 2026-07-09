@@ -90,6 +90,98 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Runs forever (--loop): distills the most popular not-yet-processed
+  # threads into durable knowledge pieces and writes them to the `knowledge`
+  # index, one ranked window (--top-n threads) per cycle. A thread already
+  # marked processed in `knowledge-processor-status` is skipped, so restarts
+  # and repeated sweeps never re-distill the same thread twice (see
+  # knowledge-processing/knowledge-processor.md#re-runs). Each cycle waits
+  # for `forum-posts` to stop growing before ranking, since ingest is a
+  # watcher that never "completes" (see
+  # knowledge-processing/knowledge-processor.md#offset-windows-and-endless-mode),
+  # then advances the offset for next time, wrapping back to the top once it
+  # has swept the whole ranked list — so it keeps mining threads past the
+  # top 10 and keeps up as ingestion adds posts. Standard library only; needs
+  # Ollama on the host (llm + embed models), so it uses host networking like
+  # ingest. For a single one-off pass instead, use `make knowledge`.
+  knowledge-processor:
+    build:
+      context: ./knowledge-processing
+    container_name: knowledge-processor
+    network_mode: host
+    command: ["python", "-u", "knowledge_processor.py", "--loop"]
+    environment:
+      - ES_URL=http://localhost:9200
+      - SOURCE_INDEX=forum-posts
+      - KNOWLEDGE_INDEX=knowledge
+      - STATUS_INDEX=knowledge-processor-status
+      - OLLAMA_URL=http://localhost:11434
+      - LLM_MODEL=gpt-oss:20b
+      - EMBED_MODEL=nomic-embed-text
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      ingest:
+        condition: service_started
+    restart: unless-stopped
+
+  # Serves the RAG agent (rag-agent/) as an OpenAI-compatible HTTP API (POST
+  # /v1/chat/completions) instead of answering one CLI question and exiting —
+  # same image/config as `make ask`, but with --serve instead of a question
+  # argument, so any OpenAI-client-compatible tool can point at
+  # http://localhost:8000 as its backend. Runs forever; a still-filling
+  # `knowledge` index just means thinner answers until the knowledge
+  # processor's sweep (above) catches up, not a startup failure. Uses host
+  # networking like the other services that reach OpenSearch/Ollama on
+  # localhost.
+  rag-serve:
+    build:
+      context: .
+      dockerfile: rag-agent/Dockerfile
+    container_name: rag-serve
+    network_mode: host
+    command:
+      - --serve
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --opensearch-url
+      - http://localhost:9200
+      - --knowledge-index
+      - knowledge
+      - --source-index
+      - forum-posts
+      - --ollama-url
+      - http://localhost:11434
+      - --llm-model
+      - gpt-oss:20b
+      - --embed-model
+      - nomic-embed-text
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      ingest:
+        condition: service_started
+    restart: unless-stopped
+
+  # A single static page (webui/index.html, no build step, no framework) that
+  # chats with rag-serve's OpenAI-compatible API. It talks to
+  # http://<host>:8000 directly from the browser, so this container's only
+  # job is to serve that one file — ordinary bridge networking + a port
+  # mapping is enough, unlike the host-networked services above. `make up`
+  # waits for this to answer, then opens a browser at it (see the Makefile).
+  rag-webui:
+    build:
+      context: ./webui
+    container_name: rag-webui
+    ports:
+      - "3000:3000"
+    depends_on:
+      rag-serve:
+        condition: service_started
+    restart: unless-stopped
+
   scraper-tuning-troubleshooting:
     build:
       context: .

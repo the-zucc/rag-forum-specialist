@@ -1,54 +1,79 @@
 # RAG
 
 An agentic retrieval-augmented generation CLI for asking questions over the
-indexed forum posts, using LangGraph, Ollama, and OpenSearch.
+`knowledge` index distilled by the
+[knowledge processor](../knowledge-processing/knowledge-processor.md), using
+LangGraph, Ollama, and OpenSearch. See [RAG-agent.md](RAG-agent.md) for the
+full design.
 
 ## How It Answers a Question
 
-`rag.py` builds a LangGraph graph that *researches* the forum iteratively —
-the way a person would: search, read, notice what's still unclear, search
-again, and only answer once it understands the subject. It doesn't answer from
-a single retrieval pass.
+`rag.py` builds a LangGraph graph that runs two loops in sequence — and
+**grows the knowledge base as a side effect of answering**:
 
 ```text
-START ─> plan ──(need more info)──> search ──> plan ──> …
-           └────(confident / out of budget)──> answerer ─> END
+user query
+    |
+    v
+planner ──(gap: keywords)──> search ──> planner ──> …          (loop A)
+    └──(sufficient / direct hit)──> reconstruct ──> distill ──> …   (loop B)
+                                        └──(no more leads)──> answer
 ```
 
-1. **plan** — the model reflects on the question, its **accumulated
-   understanding** so far, and the documents from the latest search. It
-   rewrites its understanding to fold in the new information, then decides:
-   `DONE` (it can answer confidently) or `CONTINUE` with the next search
-   keywords aimed at whatever is *still missing*. On the first pass (nothing
-   searched yet) it just picks the opening keywords.
-2. **search** — embeds the keywords and runs *one* OpenSearch query combining
-   a `knn` clause (`vector_field`) and a `multi_match` clause
-   (`body_text`/`message_text`/`thread_title`) in the same `bool.should`, so a
-   post can match on either vector similarity or keyword overlap. Relevant
-   hits are **accumulated and deduplicated across iterations** (keyed by post
-   URL/id), so nothing potentially useful is discarded between rounds.
-3. The graph loops `plan → search → plan …` until the model is confident or it
-   hits `--max-iterations` (default 3).
-4. **answerer** — answers the original question from *everything kept*, and is
-   told to say so plainly if the posts don't contain the answer rather than
-   guess.
+- **Loop A — knowledge fetching.** The planner distills the question into
+  keywords aimed at what is *still missing*; the search node runs them over
+  the `knowledge` index — each keyword individually as a wildcard query, then
+  all in combination alongside a `knn` clause on the embedded query. Hits
+  accumulate and deduplicate across rounds. The loop ends when the retained
+  pieces cover the question, when a piece **answers it directly** (the
+  "direct hit" fast path — only that piece's thread is mined), when keywords
+  repeat, or when `--max-fetch-rounds` is spent.
+- **Loop B — thread mining.** The retained pieces' `thread_id`s are followed
+  back to `forum-posts`; each source thread is reconstructed in chronological
+  order and re-read with the knowledge processor's extraction prompt, the
+  user's question included as the *area of interest*. The resulting
+  standalone pieces are embedded and **upserted back into `knowledge`** (same
+  content-hash id scheme, so re-derived facts refresh instead of duplicating).
+  A cross-thread check then decides whether the picture closes the question
+  or leads warrant reconstructing more threads (`--max-thread-rounds` caps
+  this).
+- **Answer.** Composed from the knowledge pieces plus the reconstructed
+  threads, citing thread titles and URLs — and instructed to say plainly when
+  the sources don't contain the answer rather than guess.
 
-Every step is logged (`--log-level`, default `INFO`) so the model's
-research — each search query, how many documents it kept, its evolving
-understanding, and each continue/answer decision — is observable.
+Every LLM call **streams**: tokens are printed to the terminal as they are
+generated (with a spinner while the model evaluates the prompt). Every step is
+also logged (`--log-level`, default `INFO`): the planner's assessment, each
+search, each reconstructed thread, each piece written back, and each
+continue/answer decision.
 
 ## Files
 
-- `rag.py` — the graph (`build_graph`), the `ask_rag` helper, and the CLI.
+- `rag.py` — the CLI entrypoint.
+- `graph.py` — the LangGraph graph (`build_graph`, `ask_rag`): state, nodes,
+  and edges.
+- `server.py` — the `--serve` HTTP API (OpenAI-compatible), stdlib `http.server`.
+- `knowledge.py` — search of and write-back to the `knowledge` index.
+- `threads.py` — thread reconstruction from `forum-posts` and rendering.
+- `prompts.py` — the planner / distiller / cross-check / answerer prompts.
+- `parsing.py` — parsing of the model's structured output.
+- `clients.py` — stdlib HTTP plumbing for OpenSearch and Ollama (streaming
+  included).
+- `RAG-agent.md` — the design document.
 - `Dockerfile` — standalone image for the RAG CLI, built from the repo root
   (needs the shared `Pipfile`).
 
 ## Prerequisites
 
-- An OpenSearch index populated by the [ingestion pipeline](../ingestion/README.md)
-  (`make up` brings up OpenSearch + the ingest watcher).
+- A populated `knowledge` index — run the
+  [knowledge processor](../knowledge-processing/) first (`make knowledge`).
+  The agent answers from distilled knowledge, not raw posts, and exits with a
+  pointer to `make knowledge` if the index is empty.
+- The `forum-posts` index populated by the
+  [ingestion pipeline](../ingestion/README.md) (`make up`), for thread
+  reconstruction.
 - A local Ollama instance with the embedding model (default `nomic-embed-text`)
-  and LLM model (default `llama2`, `gpt-oss:20b` via `make ask`) pulled.
+  and LLM model (default `gpt-oss:20b`) pulled.
 
 ## Usage
 
@@ -57,23 +82,61 @@ Directly with Pipenv (from the repo root):
 ```bash
 pipenv run python rag-agent/rag.py "how do I get rid of the hesitation around 3-4000 rpm?" \
   --opensearch-url http://localhost:9200 \
-  --index-name forum-posts \
+  --knowledge-index knowledge \
+  --source-index forum-posts \
   --ollama-url http://localhost:11434 \
   --llm-model gpt-oss:20b \
-  --embed-model nomic-embed-text \
-  --max-iterations 3 \
-  --log-level INFO
+  --embed-model nomic-embed-text
 ```
 
-`--max-iterations` caps how many search rounds the model may run before it
-must answer; `--log-level DEBUG` additionally prints the model's full evolving
-understanding each round.
+`--max-fetch-rounds` (default 3) caps the keyword-search rounds and
+`--max-thread-rounds` (default 2) the reconstruction/distillation rounds;
+`--thread-char-budget` (default 12000) trims long reconstructed threads;
+`--num-ctx` sets the Ollama context window (default 65536 — Ollama's own
+default of 4096 would silently truncate the reconstructed threads).
 
 Show all options:
 
 ```bash
 pipenv run python rag-agent/rag.py --help
 ```
+
+## Serving an OpenAI-Compatible API
+
+`--serve` starts an HTTP server (`server.py`, stdlib `http.server`) instead of
+answering one question and exiting:
+
+```bash
+pipenv run python rag-agent/rag.py --serve --host 0.0.0.0 --port 8000 \
+  --opensearch-url http://localhost:9200 \
+  --knowledge-index knowledge \
+  --ollama-url http://localhost:11434
+```
+
+- `POST /v1/chat/completions` — the last `user` message in `messages` is
+  taken as the question; the response is a standard chat-completion object
+  (or, with `"stream": true`, a single SSE delta followed by `[DONE]` — the
+  graph runs to completion before anything is known, so there's nothing to
+  stream token-by-token at this level). Point any OpenAI-client-compatible
+  tool (Open WebUI, LangChain's `ChatOpenAI`, `curl`) at
+  `http://<host>:<port>/v1` as its base URL.
+- `GET /v1/models` — lists `--llm-model` as the one available model, for
+  tools that populate a model picker from this endpoint.
+- `GET /healthz` — plain liveness check.
+
+This is a research agent, not a multi-turn chatbot: each request answers one
+question from `messages`, ignoring prior turns and taking a request's `model`
+field as informational only (it always uses `--llm-model` to plan and
+answer). Requests are served **one at a time** — a lock serializes them, since
+they all share one local Ollama instance that a second concurrent research
+loop would only slow down, not speed up. A request can take several minutes
+(the same two-loop research process as one-shot mode), so set client
+timeouts accordingly.
+
+An empty `knowledge` index is not a startup failure in `--serve` mode (only in
+one-shot mode) — the server logs a warning and keeps running, since the
+[knowledge processor](../knowledge-processing/)'s endless sweep may simply not
+have reached anything relevant yet.
 
 ## Docker
 
@@ -88,5 +151,10 @@ container with host networking so it can reach OpenSearch/Ollama on
 `localhost`:
 
 ```bash
-make ask
+make ask          # one-shot demonstration query
+make rag-serve    # --serve, foreground, on $(RAG_PORT) (default 8000)
 ```
+
+The `rag-serve` service in the repo's `docker-compose.yml` runs the same
+`--serve` setup continuously (`restart: unless-stopped`) as part of `make up`,
+listening on `:8000`.

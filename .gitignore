@@ -5,3 +5,4 @@ threads/
 Pipfile.lock
 crawler/page-samples/
 .env
+rag-agent/.rag-build.sha256

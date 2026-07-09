@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forum Assistant</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d10;
+    --panel: #14171c;
+    --border: #262b33;
+    --text: #e8eaed;
+    --muted: #9aa4b2;
+    --accent: #4f8cff;
+    --assistant-bubble: #14171c;
+    --error-bg: #3a1414;
+    --error-border: #6b2b2b;
+    --error-text: #ffb4b4;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --border: #e2e5ea;
+      --text: #1a1d22;
+      --muted: #5b6472;
+      --accent: #2f6fed;
+      --assistant-bubble: #ffffff;
+      --error-bg: #fdeaea;
+      --error-border: #f3b7b7;
+      --error-text: #8a2222;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg {
+    max-width: min(720px, 90%);
+    padding: 10px 14px;
+    border-radius: 12px;
+    line-height: 1.45;
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 2px;
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--assistant-bubble);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 2px;
+  }
+  .msg.pending { color: var(--muted); font-style: italic; }
+  .msg.error {
+    align-self: flex-start;
+    background: var(--error-bg);
+    color: var(--error-text);
+    border: 1px solid var(--error-border);
+  }
+  #banner {
+    font-size: 12px;
+    color: var(--error-text);
+    background: var(--error-bg);
+    border-bottom: 1px solid var(--error-border);
+    padding: 8px 20px;
+    display: none;
+  }
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    background: var(--panel);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  textarea {
+    flex: 1;
+    resize: none;
+    min-height: 44px;
+    max-height: 160px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+  textarea:focus, button:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    padding: 0 20px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Forum Assistant</h1>
+  <p>Answers are researched live from the forum's distilled knowledge base — each
+     question is independent (no memory of earlier turns) and can take a few
+     minutes while the agent reads source threads.</p>
+</header>
+<div id="banner"></div>
+<main id="log"></main>
+<footer>
+  <textarea id="input" placeholder="Ask about the forum…" rows="1"></textarea>
+  <button id="send">Send</button>
+</footer>
+<script>
+  const API_BASE = `${location.protocol}//${location.hostname}:8000`;
+  const log = document.getElementById('log');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('send');
+  const banner = document.getElementById('banner');
+
+  function addMessage(role, text) {
+    const el = document.createElement('div');
+    el.className = `msg ${role}`;
+    el.textContent = text;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  function setBusy(busy) {
+    sendBtn.disabled = busy;
+    input.disabled = busy;
+  }
+
+  async function ask(question) {
+    addMessage('user', question);
+    const pending = addMessage('assistant pending', 'Researching the forum… this can take a few minutes.');
+    setBusy(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // The agent answers one question at a time — it does not use prior
+        // turns, so only the new question is sent (matching what it actually does).
+        body: JSON.stringify({
+          model: 'rag-agent',
+          messages: [{ role: 'user', content: question }],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      pending.remove();
+      if (!res.ok) {
+        addMessage('error', data?.error?.message || `Request failed (HTTP ${res.status}).`);
+        return;
+      }
+      const content = data?.choices?.[0]?.message?.content;
+      addMessage('assistant', content || '(empty response)');
+    } catch (err) {
+      pending.remove();
+      addMessage('error', `Couldn't reach the agent at ${API_BASE}: ${err.message}`);
+    } finally {
+      setBusy(false);
+      input.focus();
+    }
+  }
+
+  function submit() {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    input.style.height = 'auto';
+    ask(text);
+  }
+
+  sendBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  });
+
+  fetch(`${API_BASE}/healthz`).catch(() => {
+    banner.style.display = 'block';
+    banner.textContent = `Can't reach the agent API at ${API_BASE} yet — it may still be starting.`;
+  });
+
+  input.focus();
+</script>
+</body>
+</html>

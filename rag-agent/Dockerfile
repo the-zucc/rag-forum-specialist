@@ -6,6 +6,6 @@ WORKDIR /app
 COPY Pipfile /app/
 RUN pip install --no-cache-dir pipenv && pipenv install --skip-lock
 
-COPY rag-agent/rag.py /app/rag-agent/rag.py
+COPY rag-agent/*.py /app/rag-agent/
 
 ENTRYPOINT ["pipenv", "run", "python", "-u", "rag-agent/rag.py"]
