@@ -1,8 +1,9 @@
-# Forum Scraper
+# RAG-Enabled Forum Specialist
 
 Scrapes a forum, indexes the posts for search, and answers questions about
-them with a local RAG pipeline. The project is split into independent
-components:
+them with a local RAG pipeline using Opensearch for finding relevant info.
+
+The project is split into independent components:
 
 | Directory | What it does | README |
 |---|---|---|
@@ -12,6 +13,14 @@ components:
 | [`etl/knowledge-processing/`](etl/knowledge-processing/knowledge-processor.md) | Distills popular/recent threads into durable, standalone knowledge pieces in a `knowledge` index — endlessly, sweeping the popularity ranking window by window. | [etl/knowledge-processing/knowledge-processor.md](etl/knowledge-processing/knowledge-processor.md) |
 | [`rag/`](rag/README.md) | Agentic LangGraph loop that answers questions from the `knowledge` index (re-reading source threads and growing the index as it goes), as a CLI or as an OpenAI-compatible HTTP API (`--serve`). | [rag/README.md](rag/README.md) |
 | [`webui/`](webui/README.md) | A single static page that chats with the RAG agent's API — no build step, no framework. | [webui/README.md](webui/README.md) |
+
+## Near-Real-Time ETL Flow, with LLM Transform Step
+
+Extract, Transform, Load. This is what is done, at the high level.
+1. The raw data (forum posts) is extracted from the forum and stored on-disk as JSON files via a user-supplied crawler (an example crawler is included here but this is site-specific). In the example crawler, the implementation includes a "serve" mode, so that the crawler can endlessly wait for new posts, making it a near-real-time data collector.
+2. The data is indexed (with vector embedding) into Opensearch as-is using a simple ingestion pipeline. This also features a "serve" mode which monitors the filesystem for new posts.
+3. A knowledge processor reads the posts from Opensearch, reconstructs the threads, and distills the knowledge into standalone pieces of information. These pieces are indexed (with vector embedding) in Opensearch in an index separate from the one containing the posts. This also includes a "serve" mode, so any new threads and posts are analyzed and distilled into knowledge pieces.
+4. An OpenAI-Compatible API, accessible through a web app, exposes a flow that relates user query to knowledge pieces, and fetches Opensearch for context based on user query and existing knowledge. Threads are reconstructed knowledge pieces kept in context, and the response is served to the user.
 
 ## How It Fits Together
 
