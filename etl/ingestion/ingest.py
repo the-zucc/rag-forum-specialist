@@ -31,7 +31,8 @@ DEFAULT_EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 EMBED_TEXT_CHAR_LIMIT = 8000
 
 
-def request(method, url, body=None, content_type="application/json"):
+def request(method, pre_url, body=None, content_type="application/json"):
+    """Performs an HTTP request using urllib."""
     data = json.dumps(body).encode("utf-8") if isinstance(body, (dict, list)) else body
     req = urllib.request.Request(url, data=data, method=method)
     if data is not None:
@@ -61,12 +62,29 @@ def wait_for_cluster(es_url, timeout):
 
 
 def iter_posts_files(dest_dir):
+    """Returns a sorted list of paths to posts.json files within the destination directory.
+
+    Args:
+        dest_dir: The root directory containing thread folders.
+
+    Returns:
+        A list of strings representing paths to found posts.json files.
+    """
     pattern = os.path.join(dest_dir, "*", "posts.json")
     return sorted(glob.glob(pattern))
 
 
 def load_posts(path, retries=3, retry_delay=0.5):
-    """Read a posts.json file, retrying briefly in case it's mid-write."""
+    """Read a posts.json file, retrying briefly in case it's mid-write.
+
+    Args:
+        path: Path to the posts.json file.
+        retries: Number of retry attempts.
+        retry_delay: Time to wait between retries.
+
+    Returns:
+        A list of dictionaries containing post data, or an empty list on failure.
+    """
     last_error = None
     for attempt in range(retries):
         try:
@@ -81,7 +99,16 @@ def load_posts(path, retries=3, retry_delay=0.5):
 
 
 def embed_text(ollama_url, model, text):
-    """Get an embedding vector for text from Ollama. Returns None for empty text."""
+    """Get an embedding vector for text from Ollama. Returns None for empty text.
+
+    Args:
+        ollama_url: The base URL for the Ollama API.
+        model: The name of the embedding model to use.
+        text: The input text to embed.
+
+    Returns:
+        A list of floats representing the embedding, or None if text is empty.
+    """
     text = (text or "").strip()
     if not text:
         return None
@@ -91,6 +118,18 @@ def embed_text(ollama_url, model, text):
 
 
 def bulk_index(es_url, index_name, batch, ollama_url=None, embed_model=None):
+    """Performs a bulk indexing operation in OpenSearch.
+
+    Args:
+        es_url: The base URL for the OpenSearch instance.
+        index_name: The name of the target index.
+        batch: A list of post dictionaries to be indexed.
+        ollama_url: Optional URL for Ollama embedding service.
+        embed_model: Optional model name for embeddings.
+
+    Returns:
+        A tuple containing (number of successfully indexed posts, number of errors).
+    """
     if not batch:
         return 0, 0
     lines = []
@@ -120,6 +159,19 @@ def bulk_index(es_url, index_name, batch, ollama_url=None, embed_model=None):
 
 
 def ingest_file(es_url, index_name, path, batch_size, ollama_url=None, embed_model=None):
+    """Indexes all posts from a single JSON file into OpenSearch.
+
+    Args:
+        es_url: The base URL for the OpenSearch instance.
+        index_name: The name of the target index.
+        path: Path to the posts.json file.
+        batch_size: Number of posts to process in each bulk request.
+        ollama_url: Optional URL for Ollama embedding service.
+        embed_model: Optional model name for embeddings.
+
+    Returns:
+        A tuple containing (total indexed, total errors).
+    """
     posts = load_posts(path)
     total_indexed = total_errors = 0
     for start in range(0, len(posts), batch_size):
@@ -132,6 +184,19 @@ def ingest_file(es_url, index_name, path, batch_size, ollama_url=None, embed_mod
 
 
 def ingest_all(es_url, index_name, dest_dir, batch_size, ollama_url=None, embed_model=None):
+    """Iterates through all thread directories and indexes their posts.json files.
+
+    Args:
+        es_url: The base URL for the OpenSearch instance.
+        index_name: The name of the target index.
+        dest_dir: The root directory containing thread folders.
+        batch_size: Number of posts per bulk request.
+        ollama_url: Optional URL for Ollama embedding service.
+        embed_model: Optional model name for embeddings.
+
+    Returns:
+        A tuple containing (total indexed, total errors).
+    """
     total_indexed = total_errors = 0
     files = iter_posts_files(dest_dir)
     for path in files:
@@ -143,6 +208,16 @@ def ingest_all(es_url, index_name, dest_dir, batch_size, ollama_url=None, embed_
 
 
 def watch(es_url, index_name, dest_dir, batch_size, ollama_url=None, embed_model=None):
+    """Uses watchdog to monitor the destination directory for changes in posts.json files.
+
+    Args:
+        es_url: The base URL for the OpenSearch instance.
+        index_name: The name of the target index.
+        dest_dir: The root directory to watch.
+        batch_size: Number of posts per bulk request.
+        olloma_url: Optional URL for Ollama embedding service.
+        embed_model: Optional model name for embeddings.
+    """
     from watchdog.events import FileSystemEventHandler
     from watchdog.observers import Observer
 
@@ -178,6 +253,7 @@ def watch(es_url, index_name, dest_dir, batch_size, ollama_url=None, embed_model
 
 
 def main():
+    """Main entry point for the ingestion service."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--es-url", default=DEFAULT_ES_URL, help="OpenSearch/Elasticsearch base URL")
     parser.add_argument("--index", default=DEFAULT_INDEX, help="Index name to ingest into")

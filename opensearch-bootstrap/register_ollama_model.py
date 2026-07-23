@@ -17,7 +17,7 @@ from opensearch_client import request, wait_for_cluster
 
 ES_URL = os.environ.get("ES_URL", "http://localhost:9200")
 OLLAMA_ENDPOINT = os.environ.get("OLLAMA_ENDPOINT", "host.docker.internal:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", os.environ.get("LLM_MODEL"))
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 EMBED_DIMENSION = int(os.environ.get("EMBED_DIMENSION", "768"))
 WAIT_TIMEOUT = int(os.environ.get("WAIT_TIMEOUT", "120"))

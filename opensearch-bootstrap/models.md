@@ -5,7 +5,7 @@ they can be used directly from OpenSearch Dashboards (Flow Framework, search
 pipelines, Dev Tools) instead of only through
 [`rag-agent/rag.py`](../rag-agent/rag.py) / [`ingestion/ingest.py`](../ingestion/ingest.py):
 
-- **`gpt-oss:20b`** (generative/chat), via Ollama's `/api/generate`.
+- **`${LLM_MODEL}`** (generative/chat), via Ollama's `/api/generate`.
 - **`nomic-embed-text`** (embedding), via Ollama's `/api/embeddings` — the
   same model `ingestion/ingest.py` already calls directly to embed posts for
   kNN search; this registers it as a *second*, independent path to it inside
@@ -27,10 +27,10 @@ place (same connector/model IDs, current config from the script), and
 redeployed, rather than skipped — so changing the body builders (endpoint,
 model name, timeouts, etc.) and re-running `make up` actually applies the
 change. Override the models via the `OLLAMA_MODEL` / `EMBED_MODEL` env vars
-(`.env`/`.env.example`) if you're not using `gpt-oss:20b` / `nomic-embed-text`.
+(`.env`/`.env.example`) if you're not using `${LLM_MODEL}` / `nomic-embed-text`.
 
 Prerequisite either way: Ollama running on the host with both models pulled
-(`ollama pull gpt-oss:20b && ollama pull nomic-embed-text`).
+(`ollama pull ${LLM_MODEL} && ollama pull nomic-embed-text`).
 
 ### Ollama must listen on all interfaces
 
@@ -103,7 +103,7 @@ end-to-end, apply to *both* connectors below:
 
 - `credential` is required and rejected if null/empty, even though Ollama
   needs no auth — a placeholder object satisfies it.
-- ml-commons' default connector read timeout is too short for `gpt-oss:20b`'s
+- ml-commons' default connector read timeout is too short for `${LLM_MODEL}`'s
   first response (~15-18s observed for a trivial prompt, including "thinking"
   tokens); `client_config.read_timeout_ms` gives it headroom. The embedding
   connector is much faster, so it keeps a shorter timeout.
@@ -116,13 +116,13 @@ Also note the `connector_id` returned by each `_create` call; the matching
 ```
 POST /_plugins/_ml/connectors/_create
 {
-  "name": "Ollama - gpt-oss:20b",
-  "description": "Connector for a local Ollama gpt-oss:20b model",
+  "name": "Ollama - ${LLM_MODEL}",
+  "description": "Connector for a local Ollama ${LLM_MODEL} model",
   "version": "1",
   "protocol": "http",
   "parameters": {
     "endpoint": "host.docker.internal:11434",
-    "model": "gpt-oss:20b"
+    "model": "${LLM_MODEL}"
   },
   "credential": {
     "placeholder_key": "not-needed-for-ollama"
@@ -148,9 +148,9 @@ POST /_plugins/_ml/connectors/_create
 ```
 POST /_plugins/_ml/models/_register
 {
-  "name": "Ollama gpt-oss:20b",
+  "name": "Ollama ${LLM_MODEL}",
   "function_name": "remote",
-  "description": "Local Ollama-hosted gpt-oss:20b generative model",
+  "description": "Local Ollama-hosted ${LLM_MODEL} generative model",
   "connector_id": "<connector_id>",
   "interface": {
     "input": {

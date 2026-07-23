@@ -322,7 +322,7 @@ repo's conventions:
 | `KNOWLEDGE_INDEX` / `--knowledge-index` | `knowledge` | Index to write pieces to. |
 | `STATUS_INDEX` / `--status-index` | `knowledge-processor-status` | Index tracking which threads have already been processed. |
 | `OLLAMA_URL` / `--ollama-url` | `http://localhost:11434` | Ollama base URL. |
-| `LLM_MODEL` / `--llm-model` | `gpt-oss:20b` | Distillation model. |
+| `LLM_MODEL` / `--llm-model` | `${LLM_MODEL}` | Distillation model. |
 | `EMBED_MODEL` / `--embed-model` | `nomic-embed-text` | Embedding model (768-dim). |
 | `--top-n` | `10` | Window size: how many ranked threads to process per pass. |
 | `--offset` | `0` | Skip this many top-ranked threads before the window (ranks `offset+1`..`offset+top-n`). |

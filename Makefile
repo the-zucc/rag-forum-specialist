@@ -3,7 +3,7 @@ INDEX_NAME ?= forum-posts
 DEST_DIR ?= threads
 COMPOSE ?= docker compose
 OLLAMA_URL ?= http://localhost:11434
-LLM_MODEL ?= gpt-oss:20b
+LLM_MODEL ?= gemma4:26b
 EMBED_MODEL ?= nomic-embed-text
 EMBED_DIMENSION ?= 768
 KNOWLEDGE_INDEX ?= knowledge
@@ -12,9 +12,9 @@ LOOP ?=
 MARK_ALL_PROCESSED ?=
 POLL_INTERVAL ?= 1800
 
-RAG_IMAGE ?= rag-agent
-RAG_BUILD_STAMP ?= rag-agent/.rag-build.sha256
-RAG_BUILD_INPUTS := rag-agent/Dockerfile Pipfile $(wildcard rag-agent/*.py)
+RAG_IMAGE ?= rag
+RAG_BUILD_STAMP ?= rag/.rag-build.sha256
+RAG_BUILD_INPUTS := rag/Dockerfile Pipfile $(wildcard rag/*.py)
 RAG_PORT ?= 8000
 WEBUI_PORT ?= 3000
 WEBUI_URL := http://localhost:$(WEBUI_PORT)
@@ -33,7 +33,7 @@ WEBUI_URL := http://localhost:$(WEBUI_PORT)
 # opens it in a browser.
 up:
 	$(COMPOSE) build --no-cache
-	$(COMPOSE) up -d
+	export LLM_MODEL=$(LLM_MODEL); export EMBED_MODEL=$(EMBED_MODEL); $(COMPOSE) up -d
 	@if command -v curl >/dev/null 2>&1; then \
 		echo "Waiting for the web UI at $(WEBUI_URL) ..."; \
 		for i in $$(seq 1 60); do \
@@ -59,7 +59,7 @@ bootstrap:
 
 # One-off local reindex of whatever is currently in threads/, without Docker.
 ingest:
-	python3 ingestion/ingest.py \
+	python3 etl/ingestion/ingest.py \
 		--es-url $(ES_URL) \
 		--index $(INDEX_NAME) \
 		--dest-dir $(DEST_DIR)
@@ -76,7 +76,7 @@ ingest:
 # $(STATUS_INDEX) around a `knowledge` index built before this tracking
 # existed: `make knowledge MARK_ALL_PROCESSED=1`.
 knowledge:
-	python3 knowledge-processing/knowledge_processor.py \
+	python3 etl/knowledge-processing/knowledge_processor.py \
 		--opensearch-url $(ES_URL) \
 		--source-index $(INDEX_NAME) \
 		--knowledge-index $(KNOWLEDGE_INDEX) \
@@ -91,21 +91,20 @@ knowledge:
 clean:
 	$(COMPOSE) down -v
 
-# Build the RAG CLI image (rag-agent/*.py + its dependencies), separate from
+# Build the RAG CLI image (rag/*.py + its dependencies), separate from
 # the scraper app image, from scratch (no layer cache) so code changes always
 # take — but only when there's a code change to take: the SHA-256 of the
-# Dockerfile, Pipfile, and rag-agent/*.py is stashed in $(RAG_BUILD_STAMP)
+# Dockerfile, Pipfile, and rag/*.py is stashed in $(RAG_BUILD_STAMP)
 # after each build, and a rebuild is skipped when that hash and the image
-# both still match. Delete $(RAG_BUILD_STAMP) (or `docker rmi $(RAG_IMAGE)`)
+# both still match. Delete $(RAG_BUILD_STAMP) (or `docker rmi $(RAG_IMAGE)`) 
 # to force one.
 rag-build:
 	@current_sha=$$(cat $(RAG_BUILD_INPUTS) | sha256sum | cut -d' ' -f1); \
-	if [ -f $(RAG_BUILD_STAMP) ] && [ "$$(cat $(RAG_BUILD_STAMP))" = "$$current_sha" ] \
-			&& docker image inspect $(RAG_IMAGE) >/dev/null 2>&1; then \
-		echo "rag-build: '$(RAG_IMAGE)' is up to date (Dockerfile/Pipfile/rag-agent/*.py unchanged); skipping build."; \
+	if [ -f $(RAG_BUILD_STAMP) ] && [ "$$(cat $(RAG_BUILD_STAMP))" = "$${current_sha}" ]; then \
+		echo "rag-build: '$(RAG_IMAGE)' is up to date (Dockerfile/Pipfile/rag/*.py unchanged); skipping build."; \
 	else \
-		docker build --no-cache -f rag-agent/Dockerfile -t $(RAG_IMAGE) . \
-			&& echo "$$current_sha" > $(RAG_BUILD_STAMP); \
+		docker build --no-cache -f rag/Dockerfile -t $(RAG_IMAGE) . \
+		    && echo "$${current_sha}" > $(RAG_BUILD_STAMP); \
 	fi
 
 # Demonstration query against the RAG CLI, run in its own container.
@@ -115,13 +114,13 @@ rag-build:
 # Ollama on localhost.
 ask: rag-build
 	docker run --rm -t --network host $(RAG_IMAGE) \
-		"how do I get rid of the hesitation around 3-4000 rpm on my Suzuki RE5?" \
-		--opensearch-url $(ES_URL) \
-		--knowledge-index $(KNOWLEDGE_INDEX) \
-		--source-index $(INDEX_NAME) \
-		--ollama-url $(OLLAMA_URL) \
-		--llm-model $(LLM_MODEL) \
-		--embed-model $(EMBED_MODEL)
+	    "how do I get rid of the hesitation around 3-4000 rpm on my Suzuki RE5?" \
+	    --opensearch-url $(ES_URL) \
+	    --knowledge-index $(KNOWLEDGE_INDEX) \
+	    --source-index $(INDEX_NAME) \
+	    --ollama-url $(OLLAMA_URL) \
+	    --llm-model $(LLM_MODEL) \
+	    --embed-model $(EMBED_MODEL)
 
 # Serves the RAG agent as an OpenAI-compatible HTTP API (POST
 # /v1/chat/completions) in its own container, on $(RAG_PORT), instead of
@@ -133,10 +132,10 @@ ask: rag-build
 # the foreground; Ctrl-C to stop.
 rag-serve: rag-build
 	docker run --rm -t --network host $(RAG_IMAGE) \
-		--serve --host 0.0.0.0 --port $(RAG_PORT) \
-		--opensearch-url $(ES_URL) \
-		--knowledge-index $(KNOWLEDGE_INDEX) \
-		--source-index $(INDEX_NAME) \
-		--ollama-url $(OLLAMA_URL) \
-		--llm-model $(LLM_MODEL) \
-		--embed-model $(EMBED_MODEL)
+	    --serve --host 0.0.0.0 --port $(RAG_PORT) \
+	    --opensearch-url $(ES_URL) \
+	    --knowledge-index $(KNOWLEDGE_INDEX) \
+	    --source-index $(INDEX_NAME) \
+	    --ollama-url $(OLLAMA_URL) \
+	    --llm-model $(LLM_MODEL) \
+	    --embed-model $(EMBED_MODEL)

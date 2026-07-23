@@ -48,7 +48,7 @@ import logging
 import os
 import sys
 
-from clients import DEFAULT_NUM_CTX, count_docs, wait_for_cluster
+from clients import count_docs, wait_for_cluster
 from graph import ask_rag
 from server import serve
 
@@ -58,11 +58,15 @@ DEFAULT_ES_URL = os.environ.get("ES_URL", "http://localhost:9200")
 DEFAULT_KNOWLEDGE_INDEX = os.environ.get("KNOWLEDGE_INDEX", "knowledge")
 DEFAULT_SOURCE_INDEX = os.environ.get("SOURCE_INDEX", "forum-posts")
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-oss:20b")
+DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL")
 DEFAULT_EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 
 
-def main():
+def main() -> None:
+    """
+    CLI entrypoint for the RAG agent. Parses arguments and starts either
+    the one-shot research loop or the OpenAI-compatible HTTP server.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("question", nargs="?",
                         help="The question to answer (omit this when --serve is set)")
@@ -89,8 +93,6 @@ def main():
                         help="Loop B budget: reconstruction -> distillation rounds")
     parser.add_argument("--thread-char-budget", type=int, default=12000,
                         help="Trim reconstructed threads longer than this")
-    parser.add_argument("--num-ctx", type=int, default=DEFAULT_NUM_CTX,
-                        help="Ollama context window")
     parser.add_argument("--wait-timeout", type=int, default=60,
                         help="Seconds to wait for the cluster. 0 or less waits forever.")
     parser.add_argument("--log-level", default="INFO",

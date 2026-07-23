@@ -28,7 +28,7 @@ services:
         - CMD-SHELL
         - >-
           curl -s http://localhost:9200/_cluster/health |
-          grep -q '"status":"green"\|"status":"yellow"'
+          grep -qE '"status":"green"|"status":"yellow"'
       interval: 10s
       timeout: 5s
       retries: 30
@@ -47,7 +47,7 @@ services:
       - "5601:5601"
     depends_on:
       opensearch:
-        condition: service_healthy
+        condition: service_started
 
   # One-shot: creates the index template and registers/deploys the local
   # Ollama generative + embedding models via ml-commons. Re-runnable; see
@@ -61,8 +61,8 @@ services:
       - ES_URL=http://opensearch:9200
       - INDEX_NAME=forum-posts
       - OLLAMA_ENDPOINT=host.docker.internal:11434
-      - OLLAMA_MODEL=gpt-oss:20b
-      - EMBED_MODEL=nomic-embed-text
+      - OLLAMA_MODEL=${LLM_MODEL}
+      - EMBED_MODEL=${EMBED_MODEL}
       - EMBED_DIMENSION=768
     depends_on:
       opensearch:
@@ -71,7 +71,7 @@ services:
 
   ingest:
     build:
-      context: ./ingestion
+      context: ./etl/ingestion
     container_name: ingest
     # Host networking so it can reach Ollama on the host's 127.0.0.1:11434
     # (Ollama doesn't listen on the docker bridge interface).
@@ -80,7 +80,7 @@ services:
       - ES_URL=http://localhost:9200
       - INDEX_NAME=forum-posts
       - OLLAMA_URL=http://localhost:11434
-      - EMBED_MODEL=nomic-embed-text
+      - EMBED_MODEL=${EMBED_MODEL}
     volumes:
       - ./threads:/app/threads:ro
     depends_on:
@@ -106,7 +106,7 @@ services:
   # ingest. For a single one-off pass instead, use `make knowledge`.
   knowledge-processor:
     build:
-      context: ./knowledge-processing
+      context: ./etl/knowledge-processing
     container_name: knowledge-processor
     network_mode: host
     command: ["python", "-u", "knowledge_processor.py", "--loop"]
@@ -116,8 +116,8 @@ services:
       - KNOWLEDGE_INDEX=knowledge
       - STATUS_INDEX=knowledge-processor-status
       - OLLAMA_URL=http://localhost:11434
-      - LLM_MODEL=gpt-oss:20b
-      - EMBED_MODEL=nomic-embed-text
+      - LLM_MODEL=${LLM_MODEL}
+      - EMBED_MODEL=${EMBED_MODEL}
     depends_on:
       opensearch:
         condition: service_healthy
@@ -125,7 +125,7 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # Serves the RAG agent (rag-agent/) as an OpenAI-compatible HTTP API (POST
+  # Serves the RAG agent (rag/) as an OpenAI-compatible HTTP API (POST
   # /v1/chat/completions) instead of answering one CLI question and exiting —
   # same image/config as `make ask`, but with --serve instead of a question
   # argument, so any OpenAI-client-compatible tool can point at
@@ -137,7 +137,7 @@ services:
   rag-serve:
     build:
       context: .
-      dockerfile: rag-agent/Dockerfile
+      dockerfile: rag/Dockerfile
     container_name: rag-serve
     network_mode: host
     command:
@@ -155,9 +155,9 @@ services:
       - --ollama-url
       - http://localhost:11434
       - --llm-model
-      - gpt-oss:20b
+      - ${LLM_MODEL}
       - --embed-model
-      - nomic-embed-text
+      - ${EMBED_MODEL}
     depends_on:
       opensearch:
         condition: service_healthy
@@ -185,14 +185,14 @@ services:
   scraper-tuning-troubleshooting:
     build:
       context: .
-      dockerfile: crawler/Dockerfile
+      dockerfile: etl/crawler/Dockerfile
     container_name: scraper-tuning-troubleshooting
     command:
       - pipenv
       - run
       - python
       - -u
-      - crawler/main.py
+      - etl/crawler/main.py
       - --board-url
       - "${SCRAPE_BOARD_URL:?Set SCRAPE_BOARD_URL in .env (see .env.example)}"
       - --output-dir

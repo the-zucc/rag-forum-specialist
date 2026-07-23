@@ -2,7 +2,7 @@
 
 One-shot setup for the OpenSearch cluster, run to completion before the
 [ingestion pipeline](../ingestion/README.md) starts: creates the index
-template and registers/deploys the local Ollama generative (`gpt-oss:20b`)
+template and registers/deploys the local Ollama generative (`${LLM_MODEL}`)
 and embedding (`nomic-embed-text`) models as ml-commons remote models.
 Re-runnable on every `docker compose up` — an existing connector/model
 (matched by name) is undeployed, updated in place, and redeployed rather than
@@ -61,7 +61,7 @@ python3 opensearch-bootstrap/register_ollama_model.py
 - `OLLAMA_ENDPOINT` — `host:port` where OpenSearch can reach Ollama (default
   `host.docker.internal:11434`; requires the `opensearch` service's
   `extra_hosts: host.docker.internal:host-gateway`, already set).
-- `OLLAMA_MODEL` — generative model name pulled in Ollama (default `gpt-oss:20b`).
+- `OLLAMA_MODEL` — generative model name pulled in Ollama (default `${LLM_MODEL}`).
 - `EMBED_MODEL` — embedding model name pulled in Ollama (default `nomic-embed-text`).
 - `EMBED_DIMENSION` — the embedding model's output vector length (default
   `768`, matching `nomic-embed-text`). Must match `index_template.json`'s

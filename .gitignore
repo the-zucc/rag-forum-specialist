@@ -1,8 +1,10 @@
 __pycache__/
+.pytest_cache
+.claude
 *.py[cod]
 .venv/
 threads/
 Pipfile.lock
-crawler/page-samples/
+etl/crawler/page-samples/
 .env
-rag-agent/.rag-build.sha256
+rag/.rag-build.sha256

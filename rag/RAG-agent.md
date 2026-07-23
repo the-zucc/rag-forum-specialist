@@ -163,12 +163,11 @@ conventions:
 | `KNOWLEDGE_INDEX` / `--knowledge-index` | `knowledge` | Index searched and written back to. |
 | `SOURCE_INDEX` / `--source-index` | `forum-posts` | Index threads are reconstructed from. |
 | `OLLAMA_URL` / `--ollama-url` | `http://localhost:11434` | Ollama base URL. |
-| `LLM_MODEL` / `--llm-model` | `gpt-oss:20b` | Planner / distiller / answerer model. |
+| `LLM_MODEL` / `--llm-model` | `${LLM_MODEL}` | Planner / distiller / answerer model. |
 | `EMBED_MODEL` / `--embed-model` | `nomic-embed-text` | Embedding model (768-dim, same as the index). |
 | `--max-fetch-rounds` | `3` | Loop A budget (keyword → search rounds). |
 | `--max-thread-rounds` | `2` | Loop B budget (reconstruction → distillation rounds). |
 | `--thread-char-budget` | `12000` | Trim reconstructed threads to this size. |
-| `--num-ctx` | `65536` | Ollama context window (the default 4096 would truncate threads). |
 
 ## Edge Cases
 

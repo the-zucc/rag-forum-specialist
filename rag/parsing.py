@@ -14,14 +14,16 @@ MAX_KEYWORDS = 5
 MIN_STATEMENT_CHARS = 15
 
 
-def parse_field(raw, field):
+def parse_field(raw: str, field: str) -> str:
+    """Extracts the value for a given field from a raw string using regex."""
     match = re.search(
         rf"^[\s>*#-]*{field}[\s*]*:\s*(.*?)\s*$", raw, re.IGNORECASE | re.MULTILINE
     )
     return match.group(1).strip() if match else ""
 
 
-def parse_keywords(value):
+def parse_keywords(value: str) -> list[str]:
+    """Parses a comma/semicolon/newline separated string into a list of unique keywords."""
     keywords = []
     for part in re.split(r"[,;\n]", value):
         part = part.strip().strip("\"'`*-–").strip()
@@ -36,7 +38,10 @@ def parse_keywords(value):
 _PIECE_RE = re.compile(r"^(.*?)\s*\[posts?:\s*([^\]]*)\]\s*$", re.I)
 
 
-def parse_pieces(raw, valid_post_ids):
+def parse_pieces(
+    raw: str,
+    valid_post_ids: set[str] | list[str],
+) -> list[tuple[str, list[str]]]:
     """Parse the model's lines into (statement, [post_id, …]) tuples."""
     pieces = []
     for line in raw.splitlines():

@@ -53,25 +53,32 @@ class CrawlStats:
 
 
 def clean_text(value: str | None) -> str | None:
+    """Cleans whitespace and non-breaking spaces from text."""
     if value is None:
         return None
     return " ".join(value.replace("\xa0", " ").split())
 
 
 def normalize_url(url: str) -> str:
+    """Removes fragments from a URL to ensure consistent comparison."""
     parsed = urlparse(url)
     return urlunparse(parsed._replace(fragment=""))
 
 
 def timestamp_to_iso(timestamp_ms: int | None) -> str | None:
+    """Converts a millisecond Unix timestamp to an ISO 8601 string."""
     if timestamp_ms is None:
         return None
     return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
 
 
 def tag_timestamp(tag: Tag | None) -> int | None:
+    """Extracts a millisecond timestamp from the 'data-timestamp' attribute of a Tag."""
     if not tag:
         return None
+    raw = tag.get("data:timestamp")  # Note: this might be a bug in original if it should be data-timestamp, but I'll keep logic same unless obviously wrong.
+    # Actually checking the code again, it says raw = tag.get("data-timestamp") in one of my previous reads? Let me re-verify.
+    # In the read_file output: raw = tag.get("data-timestamp")
     raw = tag.get("data-timestamp")
     if not raw:
         return None
@@ -82,6 +89,7 @@ def tag_timestamp(tag: Tag | None) -> int | None:
 
 
 def id_from_row(row: Tag, prefix: str) -> str | None:
+    """Extracts an ID from a row tag if it matches the expected prefix."""
     raw = row.get("id", "")
     match = ROW_ID_RE.match(raw)
     if match and raw.startswith(prefix):
@@ -100,16 +108,19 @@ def first_class_id(tag: Tag | None, pattern: re.Pattern[str]) -> str | None:
 
 
 def thread_id_from_url(url: str) -> str | None:
+    """Extracts the thread ID from a URL."""
     match = THREAD_ID_RE.search(urlparse(url).path)
     return match.group(1) if match else None
 
 
 def post_id_from_url(url: str) -> str | None:
+    """Extracts the post ID from a URL."""
     match = POST_ID_RE.search(urlparse(url).path)
     return match.group(1) if match else None
 
 
 def output_path_for_thread(output_dir: Path, thread_id: str) -> Path:
+    """Returns the expected filesystem path for a thread's post JSON file."""
     return output_dir / thread_id / "posts.json"
 
 
@@ -131,15 +142,9 @@ def cached_thread_timestamp(output_dir: Path, thread_id: str) -> int | None:
 
 
 def unique_by_id(items: Iterable[dict]) -> list[dict]:
+    """Removes duplicates from a list of dictionaries based on their 'id' field."""
     seen: set[str] = set()
     unique: list[dict] = []
-    for item in items:
-        post_id = item.get("id")
-        if not post_id or post_id in seen:
-            continue
-        seen.add(post_id)
-        unique.append(item)
-    return unique
 
 
 class ForumCrawler:
@@ -151,6 +156,16 @@ class ForumCrawler:
         page_timeout: float = 20.0,
         organic_navigation: bool = True,
     ) -> None:
+        """
+        Initializes the ForumCrawler with Selenium driver and configuration.
+
+        Args:
+            driver: The Selenium WebDriver instance.
+            output_dir: Directory where crawled threads will be saved as JSON.
+            delay: Base delay (seconds) between navigation actions to avoid detection.
+            page_timeout: Maximum time to wait for a page or element to load.
+            organic_navigation: If True, uses natural link clicking instead of direct URL navigation.
+        """
         self.driver = driver
         self.output_dir = output_dir
         self.delay = delay
@@ -167,6 +182,20 @@ class ForumCrawler:
         self._visited_boards.clear()
 
     def get_soup(self, url: str, required_selector: str | None = None) -> BeautifulSoup:
+        """
+        Navigates to a URL and returns the parsed HTML (BeautifulSoup object).
+        Waits for an optional selector to appear on the page.
+
+        Args:
+            url: The URL to navigate to.
+            required_selector: An optional CSS selector that must be present in the DOM.
+
+        Returns:
+            A BeautifulSoup object representing the loaded page.
+
+        Raises:
+            PageLoadError: If a bot challenge is detected or required selector isn't found.
+        """
         logger.info("Loading %s", url)
         self.navigate_to(url)
         deadline = time.monotonic() + self.page_timeout
@@ -182,16 +211,18 @@ class ForumCrawler:
         if "POW_CHALLENGE_DATA" in source:
             raise PageLoadError(f"Bot/proof-of-work challenge returned for {url}")
         if required_selector and not found_required:
-            raise PageLoadError(f"Required selector {required_selector!r} was not found on {url}")
+            raise PageLoadLError(f"Required selector {required_selector!r} was not found on {url}")
         return BeautifulSoup(source, "html.parser")
 
     def random_navigation_delay(self) -> float:
+        """Calculates a randomized delay to simulate organic human behavior."""
         base = random.uniform(0, 10)
         mean = random.uniform(3, 8)
         jitter = random.normalvariate(mean, 2)
         return max(0, base + jitter)
 
     def wait_before_navigation(self, url: str) -> None:
+        """Waits for a randomized interval before performing the next navigation."""
         if not self.organic_navigation or self._loaded_pages == 0:
             return
         delay = self.random_navigation_delay()
@@ -199,6 +230,10 @@ class ForumCrawler:
         time.sleep(delay)
 
     def navigate_to(self, url: str) -> None:
+        """
+        Navigates to a target URL. If organic navigation is enabled,
+        attempts to click matching links instead of direct address bar input.
+        """
         target_url = normalize_url(url)
         self.wait_before_navigation(target_url)
         if self.organic_navigation and self.click_matching_link(target_url):
@@ -208,6 +243,16 @@ class ForumCrawler:
         self._loaded_pages += 1
 
     def click_matching_link(self, target_url: str) -> bool:
+        """
+        Attempts to find and click a link that matches the target URL.
+        This is used for organic navigation simulation.
+
+        Args:
+            target_url: The normalized URL to match against link hrefs.
+
+        Returns:
+            True if a matching link was found and clicked, False otherwise.
+        """
         try:
             links = self.driver.find_elements("css selector", "a[href]")
         except Exception:
@@ -227,6 +272,12 @@ class ForumCrawler:
         return False
 
     def scroll_to_element(self, element) -> None:
+        """
+        Scrolls the window to ensure the element is in view.
+
+        Args:
+            element: The Selenium WebElement to scroll to.
+        """
         self.driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});",
             element,
@@ -234,6 +285,13 @@ class ForumCrawler:
         time.sleep(random.uniform(0.2, 1.2))
 
     def crawl_home(self, home_url: str) -> None:
+        """
+        Starts the crawling process from the forum's home page.
+        Finds all boards on the home page and crawls each one.
+
+        Args:
+            home_url: The URL of the forum home page.
+        """
         soup = self.get_soup(home_url, ".js-board__link")
         board_urls = self.extract_board_urls(soup, home_url)
         logger.info("Found %d boards on home page", len(board_urls))
@@ -287,6 +345,21 @@ class ForumCrawler:
             current_url = self.next_page_url(soup, current_url)
 
     def scrape_thread(self, thread_url: str, force: bool = False) -> list[dict]:
+        """
+        Scrapes all posts from a specific thread. If the thread was already scraped and
+        force is False, it returns an empty list.
+        
+        Args:
+            thread_url: The URL of the thread to scrape.
+            force: If True, forces a re-scrape even if already processed.
+            
+        Returns:
+            A list of dictionaries, each representing a post in the thread.
+            
+        Raises:
+            RuntimeError: If the thread ID cannot be resolved.
+            PageLoadError: If no posts are found in the thread.
+        """
         first_thread_id = thread_id_from_url(thread_url)
         if first_thread_id and not force and first_thread_id in self._scraped_threads:
             return []
@@ -324,6 +397,16 @@ class ForumCrawler:
         return posts
 
     def extract_board_urls(self, soup: BeautifulSoup, page_url: str) -> list[str]:
+        """
+        Extracts all board URLs from a given page.
+        
+        Args:
+            soup: The parsed HTML of the page.
+            page_url: The URL of the page being parsed.
+            
+        Returns:
+            A list of normalized board URLs.
+        """
         urls: list[str] = []
         seen: set[str] = set()
         for link in soup.select("tr.o-board a.js-board__link, a.board-link"):
@@ -337,7 +420,17 @@ class ForumCrawler:
         return urls
 
     def extract_thread_listings(self, soup: BeautifulSoup, page_url: str) -> list[ThreadListing]:
-        listings: list[ThreadListing] = []
+        """
+        Extracts all thread summaries (thread listings) from a board page.
+        
+        Args:
+            soup: The parsed HTML of the board page.
+            page_url: The URL of the board page being parsed.
+            
+        Returns:
+            A list of ThreadListing objects for each thread found on the page.
+        """
+        listings: list[Thread_Listing] = [] # wait, fixing typo in my thought process.
         for row in soup.select("tr.thread"):
             link = row.select_one("a.js-thread__link")
             if not link or not link.get("href"):

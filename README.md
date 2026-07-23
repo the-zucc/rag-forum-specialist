@@ -6,11 +6,11 @@ components:
 
 | Directory | What it does | README |
 |---|---|---|
-| [`crawler/`](crawler/README.md) | Crawls a forum with Selenium and writes `<thread-id>/posts.json` files. | [crawler/README.md](crawler/README.md) |
+| [`etl/crawler/`](etl/crawler/README.md) | Crawls a forum with Selenium and writes `<thread-id>/posts.json` files. | [etl/crawler/README.md](etl/crawler/README.md) |
 | [`opensearch-bootstrap/`](opensearch-bootstrap/README.md) | One-shot: creates the OpenSearch index template and registers the local Ollama generative + embedding models, before ingestion starts. | [opensearch-bootstrap/README.md](opensearch-bootstrap/README.md) |
-| [`ingestion/`](ingestion/README.md) | Watches those JSON files and indexes them into OpenSearch, embedding text with Ollama for vector search. | [ingestion/README.md](ingestion/README.md) |
-| [`knowledge-processing/`](knowledge-processing/knowledge-processor.md) | Distills popular/recent threads into durable, standalone knowledge pieces in a `knowledge` index — endlessly, sweeping the popularity ranking window by window. | [knowledge-processing/knowledge-processor.md](knowledge-processing/knowledge-processor.md) |
-| [`rag-agent/`](rag-agent/README.md) | Agentic LangGraph loop that answers questions from the `knowledge` index (re-reading source threads and growing the index as it goes), as a CLI or as an OpenAI-compatible HTTP API (`--serve`). | [rag-agent/README.md](rag-agent/README.md) |
+| [`etl/ingestion/`](etl/ingestion/README.md) | Watches those JSON files and indexes them into Opensoarch, embedding text with Ollama for vector search. | [etl/ingestion/README.md](etl/ingestion/README.md) |
+| [`etl/knowledge-processing/`](etl/knowledge-processing/knowledge-processor.md) | Distills popular/recent threads into durable, standalone knowledge pieces in a `knowledge` index — endlessly, sweeping the popularity ranking window by window. | [etl/knowledge-processing/knowledge-processor.md](etl/knowledge-processing/knowledge-processor.md) |
+| [`rag/`](rag/README.md) | Agentic LangGraph loop that answers questions from the `knowledge` index (re-reading source threads and growing the index as it goes), as a CLI or as an OpenAI-compatible HTTP API (`--serve`). | [rag/README.md](rag/README.md) |
 | [`webui/`](webui/README.md) | A single static page that chats with the RAG agent's API — no build step, no framework. | [webui/README.md](webui/README.md) |
 
 ## How It Fits Together
@@ -28,10 +28,10 @@ ingestion/  --indexes-->  OpenSearch: forum-posts
 knowledge-processing/  --distills-->  OpenSearch: knowledge
                               |
                               v
-rag-agent/  --answers-->  CLI answer, or an OpenAI-compatible API (--serve)
+rag/  --answers-->  CLI answer, or an an OpenAI-compatible API (--serve)
                               |
                               v
-webui/  --chats with-->  rag-agent's API, in a browser
+webui/  --chats with-->  rag's API, in a browser
 ```
 
 ## Quickstart

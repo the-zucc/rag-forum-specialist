@@ -47,9 +47,16 @@ class RagState(TypedDict, total=False):
 
 
 def build_graph(cfg):
+    """Builds and compiles the LangGraph research agent graph using the provided configuration.
+
+    Args:
+        cfg: A configuration object containing URL and model parameters (OpenSearch, Ollama, etc.)
+    Returns:
+        The compiled StateGraph.
+    """
     def llm(label, prompt):
         logger.info("[%s]", label)
-        return ollama_stream(cfg.ollama_url, cfg.llm_model, prompt, num_ctx=cfg.num_ctx)
+        return ollama_stream(cfg.ollama_url, cfg.llm_model, prompt)
 
     def threads_of(pieces, piece_ids=None):
         """Thread ids referenced by the given pieces, in retrieval order."""
@@ -239,7 +246,17 @@ def build_graph(cfg):
     return graph.compile()
 
 
-def ask_rag(question, cfg):
+def ask_rag(question: str, cfg: Any) -> str:
+    """
+    Entry point for the RAG agent to answer a specific question using the provided configuration.
+
+    Args:
+        question: The user's query string.
+        cfg: Configuration object containing engine parameters (URLs, models, etc.).
+
+    Returns:
+        The generated answer from the RAG graph.
+    """
     graph = build_graph(cfg)
     state = graph.invoke({"query": question}, {"recursion_limit": 50})
     return state.get("answer", "")

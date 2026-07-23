@@ -9,7 +9,11 @@ THREAD_POST_CHARS = 1200
 THREAD_FETCH_MAX_POSTS = 500
 
 
-def fetch_thread_posts(es_url, index, thread_id):
+def fetch_thread_posts(
+    es_url: str,
+    index: str,
+    thread_id: str,
+) -> list[dict[str, Any]]:
     """Every post of one thread, in chronological order."""
     body = {
         "size": THREAD_FETCH_MAX_POSTS,
@@ -36,7 +40,11 @@ def fetch_thread_posts(es_url, index, thread_id):
     return posts
 
 
-def render_thread(posts, char_budget, cited_ids=frozenset()):
+def render_thread(
+    posts: list[dict[str, Any]],
+    char_budget: int,
+    cited_ids: frozenset[str] = frozenset(),
+) -> str:
     """Render posts as text for the model, trimmed to a char budget.
 
     Under budget, every post is included in chronological order. Over budget,

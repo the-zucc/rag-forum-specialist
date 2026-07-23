@@ -8,6 +8,7 @@ coexist with (and refresh) the processor's.
 from __future__ import annotations
 
 import hashlib
+from typing import Any
 import logging
 import re
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ PIECE_SOURCE_FIELDS = [
 ]
 
 
-def _keyword_clause(keyword):
+def _keyword_clause(keyword: str) -> dict[str, Any] | None:
     """`*token*` wildcards over statement/subject, all of a keyword's tokens."""
     tokens = re.findall(r"[a-z0-9]+", keyword.lower())
     if not tokens:
@@ -40,7 +41,7 @@ def _keyword_clause(keyword):
     }
 
 
-def _collect_pieces(result):
+def _collect_pieces(result: dict[str, Any]) -> dict[string, Any]:
     pieces = {}
     for hit in result.get("hits", {}).get("hits", []):
         source = hit.get("_source", {})
@@ -58,7 +59,14 @@ def _collect_pieces(result):
     return pieces
 
 
-def search_knowledge(es_url, index, ollama_url, embed_model, query, keywords):
+def search_knowledge(
+    es_url: str,
+    index: str,
+    ollama_url: str,
+    embed_model: str,
+    query: str,
+    keywords: list[str],
+) -> dict[str, Any]:
     """One search round: each keyword one by one, then all in combination.
 
     The combined query pairs the wildcard clauses with a knn clause on the
@@ -100,8 +108,18 @@ def search_knowledge(es_url, index, ollama_url, embed_model, query, keywords):
     return found
 
 
-def index_piece(es_url, index, ollama_url, embed_model, *, statement, thread, post_ids,
-                posts_by_id, llm_model):
+def index_piece(
+    es_url: str,
+    index: str,
+    ollama_url: str,
+    embed_model: str,
+    *,
+    statement: str,
+    thread: dict[str, Any],
+    post_ids: list[str],
+    posts_by_id: dict[str, Any],
+    llm_model: str,
+) -> tuple[str, dict[str, Any]]:
     """Embed one knowledge piece and upsert it by a hash of its normalized text.
 
     Same id scheme as the knowledge processor, so a fact re-derived from an

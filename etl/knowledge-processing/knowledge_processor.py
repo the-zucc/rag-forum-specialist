@@ -54,17 +54,13 @@ DEFAULT_SOURCE_INDEX = os.environ.get("SOURCE_INDEX", "forum-posts")
 DEFAULT_KNOWLEDGE_INDEX = os.environ.get("KNOWLEDGE_INDEX", "knowledge")
 DEFAULT_STATUS_INDEX = os.environ.get("STATUS_INDEX", "knowledge-processor-status")
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-oss:20b")
+DEFAULT_LLM_MODEL = os.environ.get("LLM_MODEL")
 DEFAULT_EMBED_MODEL = os.environ.get("EMBED_MODEL", "nomic-embed-text")
 
 # How much of a reconstructed thread to render into one post before trimming.
 THREAD_POST_CHARS = 1200
 # Most posts we'll ever pull for one thread (the corpus tops out well under this).
 THREAD_FETCH_MAX_POSTS = 500
-# Ollama silently defaults to a 4096-token context and truncates past it, which
-# would cut off a reconstructed thread. Give plenty of headroom over the
-# thread char budget (~3-4k tokens) plus the prompt scaffolding and output.
-DEFAULT_NUM_CTX = 32768
 # Ignore obviously-empty "facts" the model might emit.
 MIN_STATEMENT_CHARS = 15
 # Terms-agg size used by --mark-all-processed to rank every eligible thread at
@@ -76,6 +72,7 @@ ALL_THREADS_SIZE = 100_000
 # HTTP helpers (stdlib only, matching the rest of the repo)
 # --------------------------------------------------------------------------- #
 def request(method, url, body=None, content_type="application/json"):
+    """Performs an HTTP request using urllib."""
     data = json.dumps(body).encode("utf-8") if isinstance(body, (dict, list)) else body
     req = urllib.request.Request(url, data=data, method=method)
     if data is not None:
@@ -90,21 +87,24 @@ def request(method, url, body=None, content_type="application/json"):
 
 
 def get_json(url):
+    """Performs a GET request and returns the parsed JSON response."""
     return request("GET", url)[1]
 
 
 def post_json(url, body):
+    """Performs a POST request and returns the parsed JSON response."""
     return request("POST", url, body)[1]
 
 
-def ollama_generate(ollama_url, model, prompt, num_ctx=DEFAULT_NUM_CTX):
+def ollama_generate(ollama_url, model, prompt):
     """Non-streaming completion — this is a batch job, no terminal to stream to."""
-    body = {"model": model, "prompt": prompt, "stream": False, "options": {"num_ctx": num_ctx}}
+    body = {"model": model, "prompt": prompt, "stream": False, "options": {}}
     result = post_json(f"{ollama_url}/api/generate", body)
     return result.get("response", "")
 
 
 def ollama_embed(ollama_url, model, text):
+    """Get an embedding vector for text from Ollama. Returns None for empty text."""
     result = post_json(f"{ollama_url}/api/embeddings", {"model": model, "prompt": text})
     return result["embedding"]
 
@@ -129,6 +129,15 @@ def wait_for_cluster(es_url, timeout):
 
 
 def count_docs(es_url, index):
+    """Returns the number of documents in the specified OpenSearch index.
+
+    Args:
+        es_url: The base URL for the OpenSearch instance.
+        index: The name of the index to count.
+
+    Returns:
+        The document count as an integer. Returns 0 if the index is not found.
+    """
     try:
         return int(get_json(f"{es_url}/{index}/_count").get("count", 0))
     except RuntimeError as e:

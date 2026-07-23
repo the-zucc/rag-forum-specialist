@@ -5,7 +5,8 @@ from __future__ import annotations
 MAX_PROMPT_PIECES = 40
 
 
-def render_piece_list(pieces):
+def render_piece_list(pieces: dict[str, Any]) -> str:
+    """Formats a list of knowledge pieces for inclusion in an LLM prompt."""
     lines = []
     for i, piece in enumerate(list(pieces)[:MAX_PROMPT_PIECES], 1):
         statement = piece["statement"]
@@ -15,7 +16,13 @@ def render_piece_list(pieces):
     return "\n".join(lines) if lines else "(none retrieved yet)"
 
 
-def build_planner_prompt(query, pieces, tried, budget_left):
+def build_planner_prompt(
+    query: str,
+    pieces: dict[str, Any],
+    tried: list[list[str]],
+    budget_left: bool,
+) -> str:
+    """Builds the prompt for the planner node to decide the next stage of research."""
     tried_text = (
         "\n".join("- " + ", ".join(kws) for kws in tried) if tried else "(none yet)"
     )
@@ -50,7 +57,11 @@ def build_planner_prompt(query, pieces, tried, budget_left):
     )
 
 
-def build_distill_prompt(query, thread, thread_text):
+def build_distill_prompt(
+    query: str,
+    thread: dict[str, Any],
+    thread_text: str,
+) -> str:
     """The knowledge processor's extraction prompt, with the user's query
     included as the area of interest steering the model's attention."""
     return (
@@ -79,7 +90,12 @@ def build_distill_prompt(query, thread, thread_text):
     )
 
 
-def build_crosscheck_prompt(query, pieces, threads):
+def build_crosscheck_prompt(
+    query: str,
+    pieces: dict[str, Any],
+    threads: list[dict[str, Any]],
+) -> str:
+    """Builds the prompt for checking if new threads provide sufficient information."""
     thread_lines = "\n".join(
         f'- "{t["title"]}" ({len(t["posts"])} posts)' for t in threads
     ) or "(none)"
@@ -104,7 +120,13 @@ def build_crosscheck_prompt(query, pieces, threads):
     )
 
 
-def build_answer_prompt(query, pieces, threads, thread_texts):
+def build_answer_prompt(
+    query: str,
+    pieces: dict[str, Any],
+    threads: list[dict[str, Any]],
+    thread_texts: dict[str, str],
+) -> str:
+    """Builds the final prompt for generating the answer based on all retrieved information."""
     sections = []
     for thread in threads:
         text = thread_texts.get(thread["thread_id"], "")

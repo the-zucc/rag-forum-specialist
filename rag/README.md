@@ -72,8 +72,7 @@ continue/answer decision.
 - The `forum-posts` index populated by the
   [ingestion pipeline](../ingestion/README.md) (`make up`), for thread
   reconstruction.
-- A local Ollama instance with the embedding model (default `nomic-embed-text`)
-  and LLM model (default `gpt-oss:20b`) pulled.
+- A local Ollama instance with the embedding and LLM models pulled.
 
 ## Usage
 
@@ -85,15 +84,13 @@ pipenv run python rag-agent/rag.py "how do I get rid of the hesitation around 3-
   --knowledge-index knowledge \
   --source-index forum-posts \
   --ollama-url http://localhost:11434 \
-  --llm-model gpt-oss:20b \
-  --embed-model nomic-embed-text
+  --llm-model ${LLM_MODEL} \
+  --embed-model ${EMBED_MODEL}
 ```
 
 `--max-fetch-rounds` (default 3) caps the keyword-search rounds and
 `--max-thread-rounds` (default 2) the reconstruction/distillation rounds;
 `--thread-char-budget` (default 12000) trims long reconstructed threads;
-`--num-ctx` sets the Ollama context window (default 65536 — Ollama's own
-default of 4096 would silently truncate the reconstructed threads).
 
 Show all options:
 

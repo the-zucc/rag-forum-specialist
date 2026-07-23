@@ -29,7 +29,7 @@ RUN if [ "$(uname -m)" = "x86_64" ]; then \
     fi
 
 # Copy the application code
-COPY crawler /app/crawler
+COPY etl/crawler /app/crawler
 
 ENV PYTHONPATH="${PYTHONPATH}:/app:/app/crawler"
 

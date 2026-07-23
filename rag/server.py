@@ -34,14 +34,18 @@ logger = logging.getLogger("rag")
 _lock = threading.Lock()
 
 
-def _extract_question(messages):
+from typing import Any
+
+def _extract_question(messages: list[dict[str, Any]] | None) -> str | None:
+    """Extracts the last user message content from a list of chat messages."""
     for message in reversed(messages or []):
         if message.get("role") == "user" and message.get("content"):
             return message["content"]
     return None
 
 
-def make_handler(cfg):
+def make_handler(cfg: Any) -> type[BaseHTTPRequestHandler]:
+    """Creates and returns an HTTP handler class configured with the agent's settings."""
     class Handler(BaseHTTPRequestHandler):
         server_version = "rag-agent/1.0"
         protocol_version = "HTTP/1.1"
@@ -156,7 +160,8 @@ def make_handler(cfg):
     return Handler
 
 
-def serve(cfg):
+def serve(cfg: Any) -> None:
+    """Starts the HTTP server to expose the RAG agent as an OpenAI-compatible API."""
     handler = make_handler(cfg)
     httpd = ThreadingHTTPServer((cfg.host, cfg.port), handler)
     logger.info(
